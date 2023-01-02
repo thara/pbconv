@@ -7,9 +7,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
@@ -33,12 +33,6 @@ func toProto() error {
 		os.Exit(1)
 	}
 
-	r := bufio.NewReader(os.Stdin)
-	input, err := r.ReadString('\n')
-	if err != nil && err != io.EOF {
-		return fmt.Errorf("fail to read stdin: %v", err)
-	}
-
 	messageName := toProtoCommand.Args()[0]
 	paths := toProtoCommand.Args()[1:]
 
@@ -47,15 +41,24 @@ func toProto() error {
 		return fmt.Errorf("fail to resolve message descriptor: %w", err)
 	}
 
-	var msg *dynamicpb.Message
+	sc := bufio.NewScanner(os.Stdin)
+	var input []byte
+	for sc.Scan() {
+		input = append(input, sc.Bytes()...)
+	}
+	if sc.Err() != nil {
+		return fmt.Errorf("fail to scan stdin: %w", sc.Err())
+	}
+
+	var msg proto.Message
 	switch format(inputFormat) {
 	case formatJSON:
-		if !json.Valid([]byte(input)) {
+		if !json.Valid(input) {
 			return errors.New("invalid json input")
 		}
 
 		var obj map[string]any
-		err := json.Unmarshal([]byte(input), &obj)
+		err = json.Unmarshal(input, &obj)
 		if err != nil {
 			return fmt.Errorf("fail to unmarshal json: %w", err)
 		}
@@ -65,7 +68,11 @@ func toProto() error {
 			return fmt.Errorf("fail to message fields: %w", err)
 		}
 	case formatText:
-		//TODO
+		dm := dynamicpb.NewMessage(desc)
+		msg = dm.New().Interface()
+		if err := prototext.Unmarshal(input, msg); err != nil {
+			return fmt.Errorf("fail to unmarshal text proto: %w", err)
+		}
 	default:
 		return fmt.Errorf("unsupported input format: %s", inputFormat)
 	}
