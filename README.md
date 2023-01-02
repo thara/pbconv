@@ -47,3 +47,10 @@ author: "Tom"
 published: true
 ```
 
+## Author
+
+Tomochika Hara https://thara.dev
+
+## License
+
+MIT
