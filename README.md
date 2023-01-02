@@ -33,9 +33,15 @@ message Book {
 ### Generate binary of Protocol Buffers wire format from JSON
 
 ```
-$ {isbn:123 title:sample author:Tom published:true} | to json --raw | pbconv to-proto --from json --out book.bin Book book.proto
+$ cat book.json
+{
+  "isbn": 123,
+  "title": "sample",
+  "author": "Tom",
+  "published": true
+}
+$ cat book.json | pbconv to-proto --from json --out book.bin Book book.proto
 ```
-(used [nushell's `to json`](https://www.nushell.sh/book/commands/to_json.html))
 
 ### Show contents of Protocol Buffers wire format by [Text-format](https://developers.google.com/protocol-buffers/docs/text-format-spec)
 
