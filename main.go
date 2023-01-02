@@ -1,53 +1,55 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
 	"github.com/bufbuild/protocompile"
-	"google.golang.org/protobuf/encoding/prototext"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-var verbose bool
+type format string
 
-func init() {
-	flag.BoolVar(&verbose, "v", false, "verbose mode")
-}
+const (
+	formatJSON  format = "json"
+	formatText  format = "text"
+	formatProto format = "proto"
+)
 
 func main() {
-	flag.Parse()
-
-	messageName := flag.Args()[0]
-	paths := flag.Args()[1:]
-
-	r := bufio.NewReader(os.Stdin)
-	s, err := r.ReadString('\n')
-	if err != nil && err != io.EOF {
-		log.Fatalf("fail to read stdin: %v", err)
-	}
-	if !json.Valid([]byte(s)) {
-		log.Fatal("invalid json input")
+	if len(os.Args) < 2 {
+		fmt.Printf("Usage: %s to-proto|from-proto ...\n", os.Args[0])
+		os.Exit(1)
 	}
 
-	if err := run(s, messageName, paths...); err != nil {
+	subCommandName := os.Args[1]
+
+	if err := run(subCommandName); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(jsonString string, messageName string, paths ...string) error {
-	var input map[string]any
-	if err := json.Unmarshal([]byte(jsonString), &input); err != nil {
-		return fmt.Errorf("fail to unmarshal json: %w", err)
+func run(subCommandName string) error {
+	switch subCommandName {
+	case "to-proto":
+		if err := toProtoCommand.Parse(os.Args[2:]); err != nil {
+			return fmt.Errorf("fail to parse flags: %v", err)
+		}
+		return toProto()
+	case "from-proto":
+		if err := fromProtoCommand.Parse(os.Args[2:]); err != nil {
+			return fmt.Errorf("fail to parse flags: %v", err)
+		}
+		return fromProto()
+	default:
+		fmt.Printf("Usage: %s to-proto|from-proto ...\n", os.Args[0])
 	}
+	return nil
+}
 
+func resolveMessageDescriptor(messageName string, paths []string) (protoreflect.MessageDescriptor, error) {
 	compiler := protocompile.Compiler{
 		Resolver: &protocompile.SourceResolver{},
 	}
@@ -56,7 +58,7 @@ func run(jsonString string, messageName string, paths ...string) error {
 
 	fs, err := compiler.Compile(ctx, paths...)
 	if err != nil {
-		return fmt.Errorf("fail to compile proto: %w", err)
+		return nil, fmt.Errorf("fail to compile proto: %w", err)
 	}
 
 	var desc protoreflect.MessageDescriptor
@@ -68,23 +70,7 @@ func run(jsonString string, messageName string, paths ...string) error {
 		}
 	}
 	if desc == nil {
-		return fmt.Errorf("not found message: %s", messageName)
+		return nil, fmt.Errorf("not found message: %s", messageName)
 	}
-
-	msg, err := fillMessageFields(input, desc)
-	if err != nil {
-		return fmt.Errorf("fail to message fields: %w", err)
-	}
-
-	if verbose {
-		fmt.Fprintln(os.Stderr, prototext.Format(msg))
-	}
-
-	result, err := proto.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("fail to marshal proto: %w", err)
-	}
-	os.Stdout.Write(result)
-
-	return nil
+	return desc, nil
 }
